@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -79,6 +80,7 @@ func (service imageService) resizeImage(photo Photo, pix int, fieldName string) 
 
 	if err != nil {
 		level.Error(service.logger).Log("API call failed", err)
+		service.resizeImageFallback(photo, pix, fieldName)
 		return
 	}
 
@@ -89,18 +91,19 @@ func (service imageService) resizeImage(photo Photo, pix int, fieldName string) 
 	response, err := http.Get(fmt.Sprintf("%v", res["kraked_url"]))
 	if err != nil {
 		level.Error(service.logger).Log("API call failed", err)
+		service.resizeImageFallback(photo, pix, fieldName)
 		return
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != 200 {
 		level.Error(service.logger).Log("Received non 200 response code", response.StatusCode)
+		service.resizeImageFallback(photo, pix, fieldName)
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*50)
 	defer cancel()
-	// Upload an object with storage.Writer.
 	bucketName := "meshetr-images"
 	objectName := fmt.Sprintf("%d-%d", photo.IdAd, time.Now().UnixNano())
 	url := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucketName, objectName)
@@ -108,8 +111,31 @@ func (service imageService) resizeImage(photo Photo, pix int, fieldName string) 
 	defer writer.Close()
 	if _, err := io.Copy(writer, response.Body); err != nil {
 		level.Error(service.logger).Log("Storage upload failed", err)
+		service.resizeImageFallback(photo, pix, fieldName)
 		return
 	}
 
+	service.db.Model(&photo).Update(fieldName, url)
+}
+
+func (service imageService) resizeImageFallback(photo Photo, pix int, fieldName string) {
+	viper.AutomaticEnv()
+	response, err := http.Get(fmt.Sprintf("https://api.imageresizer.io/v1/images?key=%s&url=%s",
+		viper.GetString("IMAGERESIZER_API_KEY"),
+		url.QueryEscape(photo.UrlOriginal)))
+	if err != nil {
+		level.Error(service.logger).Log("API call failed", err)
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != 200 {
+		level.Error(service.logger).Log("Received non 200 response code", response.StatusCode)
+		return
+	}
+	var res map[string]interface{}
+	json.NewDecoder(response.Body).Decode(&res)
+	imageresizerResponse := res["response"].(map[string]interface{})
+	id := imageresizerResponse["id"].(string)
+	url := "https://im.ages.io/" + id + "?width=" + fmt.Sprint(pix)
 	service.db.Model(&photo).Update(fieldName, url)
 }
