@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 )
 
 type Service interface {
-	ProcessImage(ctx context.Context, url string) error
+	ProcessImage(ctx context.Context, id uint32) error
 }
 
 type imageService struct {
@@ -20,7 +21,7 @@ func MakeService(logger log.Logger) Service {
 	}
 }
 
-func (service imageService) ProcessImage(ctx context.Context, url string) error {
-	level.Info(service.logger).Log("msg", "Received url: "+url)
+func (service imageService) ProcessImage(ctx context.Context, id uint32) error {
+	level.Info(service.logger).Log("msg", "Received url: "+fmt.Sprintf("%d", id))
 	return nil
 }

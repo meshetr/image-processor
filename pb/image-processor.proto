@@ -7,7 +7,7 @@ service ImageProcessorService {
 }
 
 message Image {
-  string url = 1;
+  uint32 id = 1;
 }
 
 enum StatusCode {

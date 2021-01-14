@@ -10,7 +10,7 @@ type Endpoints struct {
 }
 
 type ProcessRequest struct {
-	Url string
+	Id uint32
 }
 
 type ProcessResponse struct {
@@ -26,7 +26,7 @@ func MakeEndpoints(service Service) Endpoints {
 func MakeProcessEndpoint(service Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(ProcessRequest)
-		err := service.ProcessImage(ctx, req.Url)
+		err := service.ProcessImage(ctx, req.Id)
 		return ProcessResponse{Err: err}, nil
 	}
 }

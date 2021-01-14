@@ -32,7 +32,7 @@ func (server *gRPCServer) Process(ctx context.Context, req *pb.Image) (*pb.Statu
 
 func decodeProcessRequest(ctx context.Context, request interface{}) (interface{}, error) {
 	req := request.(*pb.Image)
-	return ProcessRequest{Url: req.Url}, nil
+	return ProcessRequest{Id: req.Id}, nil
 }
 
 func encodeProcessResponse(ctx context.Context, response interface{}) (interface{}, error) {
