@@ -1,0 +1,74 @@
+name: Publish tagged commits to Docker Hub and deploy to Kubernetes
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Get tag
+        id: get_tag
+        run: echo ::set-output name=TAG::meshetr/${{ github.event.repository.name }}:${GITHUB_REF#refs/tags/},meshetr/${{ github.event.repository.name }}:latest
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+        with:
+          platforms: all
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          push: true
+          tags: ${{ steps.get_tag.outputs.tag }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache
+
+      - name: Image digest
+        run: echo ${{ steps.docker_build.outputs.digest }}
+
+  kubernetes:
+    runs-on: ubuntu-latest
+    needs: docker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Install kubectl
+        run: sudo apt-get install kubectl -y
+
+      - name: Deploy to Kubernetes
+        run: |
+          echo "$KUBECONFIG_STRING" > "$KUBECONFIG"
+          echo "$GOOGLE_APPLICATION_CREDENTIALS_STRING" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          kubectl apply -f ./k8s/image-processor.yaml
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_STRING: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          GOOGLE_APPLICATION_CREDENTIALS: google_app_creds.json
+          KUBECONFIG_STRING: ${{ secrets.KUBECONFIG }}
+          KUBECONFIG: kubeconfig.yaml
