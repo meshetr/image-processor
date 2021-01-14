@@ -66,10 +66,10 @@ spec:
                     name: kraken
                     key: key
             - name: KRAKEN_API_SECRET
-                valueFrom:
-                  secretKeyRef:
-                    name: kraken
-                    key: secret
+              valueFrom:
+                secretKeyRef:
+                  name: kraken
+                  key: secret
 ---
 
 apiVersion: v1
