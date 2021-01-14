@@ -22,6 +22,6 @@ func MakeService(logger log.Logger) Service {
 }
 
 func (service imageService) ProcessImage(ctx context.Context, id uint32) error {
-	level.Info(service.logger).Log("msg", "Received url: "+fmt.Sprintf("%d", id))
+	level.Info(service.logger).Log("msg", "Received ID: "+fmt.Sprintf("%d", id))
 	return nil
 }
