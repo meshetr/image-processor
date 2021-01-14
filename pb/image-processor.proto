@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+option go_package = "image-processor;pb";
+
+service ImageProcessorService {
+  rpc Process(Image) returns (Status) {}
+}
+
+message Image {
+  string url = 1;
+}
+
+enum StatusCode {
+  Unknown = 0;
+  Ok = 1;
+  Failed = 2;
+}
+
+message Status {
+  string Message = 1;
+  StatusCode Code = 2;
+}
