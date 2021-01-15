@@ -23,7 +23,7 @@ func main() {
 
 	var logger log.Logger
 	{
-		logger = log.NewJSONLogger(os.Stdout)
+		logger = log.NewLogfmtLogger(os.Stdout)
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 		logger = log.With(logger, "caller", log.DefaultCaller)
 	}
@@ -31,7 +31,7 @@ func main() {
 	ctx := context.Background()
 	storageClient, err := storage.NewClient(ctx, option.WithCredentialsJSON([]byte(viper.GetString("GCP_CLIENT_SECRET"))))
 	if err != nil {
-		logger.Log("storage.NewClient: %v", err)
+		level.Error(logger).Log("component", "storage.NewClient", "msg", err)
 	} else {
 		defer storageClient.Close()
 	}
@@ -46,8 +46,8 @@ func main() {
 	db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	service := MakeService(logger, db, storageClient)
-	endpoint := MakeEndpoints(service)
-	grpcServer := NewGRPCServer(endpoint, logger)
+	endpoint := MakeEndpoints(logger, service)
+	grpcServer := NewGRPCServer(logger, endpoint)
 
 	errs := make(chan error)
 	go func() {
@@ -58,16 +58,16 @@ func main() {
 
 	grpcListener, err := net.Listen("tcp", ":50051")
 	if err != nil {
-		logger.Log("during", "Listen", "err", err)
+		level.Error(logger).Log("component", "grpcListener", "msg", err)
 		os.Exit(1)
 	}
 
 	go func() {
 		baseServer := grpc.NewServer()
 		pb.RegisterImageProcessorServiceServer(baseServer, grpcServer)
-		level.Info(logger).Log("msg", "Server started successfully!")
+		level.Info(logger).Log("component", "grpcServer", "msg", "Server started successfully!")
 		baseServer.Serve(grpcListener)
 	}()
 
-	level.Error(logger).Log("exit", <-errs)
+	level.Error(logger).Log("status", "exit", "msg", <-errs)
 }

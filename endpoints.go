@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"github.com/go-kit/kit/endpoint"
+	"github.com/go-kit/kit/log"
 )
 
 type Endpoints struct {
@@ -17,7 +18,7 @@ type ProcessResponse struct {
 	Err error
 }
 
-func MakeEndpoints(service Service) Endpoints {
+func MakeEndpoints(logger log.Logger, service Service) Endpoints {
 	return Endpoints{
 		ProcessEndpoint: MakeProcessEndpoint(service),
 	}

@@ -9,10 +9,11 @@ import (
 
 type gRPCServer struct {
 	process gt.Handler
+	logger  log.Logger
 	pb.UnimplementedImageProcessorServiceServer
 }
 
-func NewGRPCServer(endpoints Endpoints, logger log.Logger) pb.ImageProcessorServiceServer {
+func NewGRPCServer(logger log.Logger, endpoints Endpoints) pb.ImageProcessorServiceServer {
 	return &gRPCServer{
 		process: gt.NewServer(
 			endpoints.ProcessEndpoint,
