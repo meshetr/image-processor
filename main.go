@@ -24,7 +24,7 @@ func main() {
 	grpcAddr := ":50051"
 	var logger log.Logger
 	{
-		logger = log.NewLogfmtLogger(os.Stdout)
+		logger = log.NewJSONLogger(os.Stdout)
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 		logger = log.With(logger, "caller", log.DefaultCaller)
 	}
