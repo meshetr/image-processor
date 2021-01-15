@@ -8,6 +8,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/spf13/viper"
+	"google.golang.org/grpc/metadata"
 	"gorm.io/gorm"
 	"io"
 	"net/http"
@@ -42,23 +43,26 @@ func (Photo) TableName() string {
 func MakeService(logger log.Logger, db *gorm.DB, storageClient *storage.Client) Service {
 	db.AutoMigrate(&Photo{})
 	return &imageService{
-		logger:        log.With(logger, "component", "service", "request-id", time.Now().UnixNano()),
+		logger:        log.With(logger, "component", "service"),
 		db:            db,
 		storageClient: storageClient,
 	}
 }
 
 func (service imageService) ProcessImage(ctx context.Context, id uint32) error {
-	level.Info(service.logger).Log("msg", "request received", "context", fmt.Sprintf("\"id\":%d", id))
+	md, _ := metadata.FromIncomingContext(ctx)
+	logger := log.With(service.logger, "request-id", md["request-id"][0])
+
+	level.Info(logger).Log("msg", "request received", "context", fmt.Sprintf("\"id\":%d", id))
 	var photo Photo
 	service.db.First(&photo, id)
-	go service.resizeImage(photo, 1280, "url_large")
-	go service.resizeImage(photo, 960, "url_medium")
-	go service.resizeImage(photo, 640, "url_small")
+	go service.resizeImage(logger, photo, 1280, "url_large")
+	go service.resizeImage(logger, photo, 960, "url_medium")
+	go service.resizeImage(logger, photo, 640, "url_small")
 	return nil
 }
 
-func (service imageService) resizeImage(photo Photo, pix int, fieldName string) {
+func (service imageService) resizeImage(logger log.Logger, photo Photo, pix int, fieldName string) {
 	viper.AutomaticEnv()
 	apiUrl := "https://api.kraken.io/v1/url"
 	payload := strings.NewReader(`{
@@ -79,8 +83,8 @@ func (service imageService) resizeImage(photo Photo, pix int, fieldName string) 
 	resp, err := http.Post(apiUrl, "application/json", payload)
 
 	if err != nil {
-		level.Error(service.logger).Log("context", "kraken.io API call", "msg", err)
-		service.resizeImageFallback(photo, pix, fieldName)
+		level.Error(logger).Log("context", "kraken.io API call", "msg", err)
+		service.resizeImageFallback(logger, photo, pix, fieldName)
 		return
 	}
 
@@ -90,15 +94,15 @@ func (service imageService) resizeImage(photo Photo, pix int, fieldName string) 
 
 	response, err := http.Get(fmt.Sprintf("%v", res["kraked_url"]))
 	if err != nil {
-		level.Error(service.logger).Log("context", "kraken.io image download", "msg", err)
-		service.resizeImageFallback(photo, pix, fieldName)
+		level.Error(logger).Log("context", "kraken.io image download", "msg", err)
+		service.resizeImageFallback(logger, photo, pix, fieldName)
 		return
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != 200 {
-		level.Error(service.logger).Log("context", "kraken.io image download", "msg", fmt.Sprintf("Received non 200 response code: %d", response.StatusCode))
-		service.resizeImageFallback(photo, pix, fieldName)
+		level.Error(logger).Log("context", "kraken.io image download", "msg", fmt.Sprintf("Received non 200 response code: %d", response.StatusCode))
+		service.resizeImageFallback(logger, photo, pix, fieldName)
 		return
 	}
 
@@ -110,31 +114,31 @@ func (service imageService) resizeImage(photo Photo, pix int, fieldName string) 
 	writer := service.storageClient.Bucket(bucketName).Object(objectName).NewWriter(ctx)
 	defer writer.Close()
 	if _, err := io.Copy(writer, response.Body); err != nil {
-		level.Error(service.logger).Log("context", "Storage upload", "msg", err)
-		service.resizeImageFallback(photo, pix, fieldName)
+		level.Error(logger).Log("context", "Storage upload", "msg", err)
+		service.resizeImageFallback(logger, photo, pix, fieldName)
 		return
 	}
 
 	service.db.Model(&photo).Update(fieldName, url)
 	logContext, _ := json.Marshal(photo)
-	level.Info(service.logger).Log("context", logContext, "msg", "Resized photo successfully uploaded.")
+	level.Info(logger).Log("context", logContext, "msg", "Resized photo successfully uploaded.")
 }
 
-func (service imageService) resizeImageFallback(photo Photo, pix int, fieldName string) {
+func (service imageService) resizeImageFallback(logger log.Logger, photo Photo, pix int, fieldName string) {
 	logContext, _ := json.Marshal(photo)
-	level.Warn(service.logger).Log("context", logContext, "msg", "Image resizing FALLBACK.")
+	level.Warn(logger).Log("context", logContext, "msg", "Image resizing FALLBACK.")
 
 	viper.AutomaticEnv()
 	response, err := http.Get(fmt.Sprintf("https://api.imageresizer.io/v1/images?key=%s&url=%s",
 		viper.GetString("IMAGERESIZER_API_KEY"),
 		url.QueryEscape(photo.UrlOriginal)))
 	if err != nil {
-		level.Error(service.logger).Log("context", "imageresizer API call", "msg", err)
+		level.Error(logger).Log("context", "imageresizer API call", "msg", err)
 		return
 	}
 	defer response.Body.Close()
 	if response.StatusCode != 200 {
-		level.Error(service.logger).Log("context", "imageresizer API call", "msg", fmt.Sprintf("Received non 200 response code: %d", response.StatusCode))
+		level.Error(logger).Log("context", "imageresizer API call", "msg", fmt.Sprintf("Received non 200 response code: %d", response.StatusCode))
 		return
 	}
 	var res map[string]interface{}
@@ -144,5 +148,5 @@ func (service imageService) resizeImageFallback(photo Photo, pix int, fieldName 
 	url := "https://im.ages.io/" + id + "?width=" + fmt.Sprint(pix)
 
 	service.db.Model(&photo).Update(fieldName, url)
-	level.Info(service.logger).Log("context", logContext, "msg", "Resized photo successfully uploaded (FALLBACK).")
+	level.Info(logger).Log("context", logContext, "msg", "Resized photo successfully uploaded (FALLBACK).")
 }

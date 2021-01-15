@@ -21,6 +21,7 @@ import (
 func main() {
 	viper.AutomaticEnv()
 
+	grpcAddr := ":50051"
 	var logger log.Logger
 	{
 		logger = log.NewLogfmtLogger(os.Stdout)
@@ -56,7 +57,7 @@ func main() {
 		errs <- fmt.Errorf("%s", <-c)
 	}()
 
-	grpcListener, err := net.Listen("tcp", ":50051")
+	grpcListener, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		level.Error(logger).Log("component", "grpcListener", "msg", err)
 		os.Exit(1)
@@ -65,7 +66,7 @@ func main() {
 	go func() {
 		baseServer := grpc.NewServer()
 		pb.RegisterImageProcessorServiceServer(baseServer, grpcServer)
-		level.Info(logger).Log("component", "grpcServer", "msg", "Server started successfully!")
+		level.Info(logger).Log("component", "grpcServer", "msg", "Server started successfully!", "context", "port"+grpcAddr)
 		baseServer.Serve(grpcListener)
 	}()
 

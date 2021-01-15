@@ -13,7 +13,7 @@ spec:
         app: image-processor
     spec:
       containers:
-        - image: meshetr/image-processor:v0.5
+        - image: meshetr/image-processor:v0.6
           name: image-processor
           ports:
             - containerPort: 50051
